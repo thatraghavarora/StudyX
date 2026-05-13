@@ -16,6 +16,7 @@ import {
   Crown,
   Download,
   Eye,
+  FileQuestion,
   FileText,
   Flag,
   Gauge,
@@ -191,7 +192,8 @@ function LandingPage({ navigate }) {
     navigate(`/${href}`);
   };
 
-  const goToPage = (to) => {
+  const goToPage = (event, to) => {
+    event.preventDefault();
     setMobileMenuOpen(false);
     navigate(to);
   };
@@ -234,12 +236,25 @@ function LandingPage({ navigate }) {
               {item}
             </a>
           ))}
-          <button onClick={() => goToPage("/dashboard?mode=quick")}>Generate Test</button>
-          <button onClick={() => goToPage("/dashboard?mode=quick&source=upload")}>Upload Chapter</button>
-          <button onClick={() => goToPage("/login")}>Login</button>
-          <button className="primary-mobile-action" onClick={() => goToPage("/login?mode=signup")}>
+          <a href="/dashboard?mode=quick" onClick={(event) => goToPage(event, "/dashboard?mode=quick")}>
+            Generate Test
+          </a>
+          <a
+            href="/dashboard?mode=quick&source=upload"
+            onClick={(event) => goToPage(event, "/dashboard?mode=quick&source=upload")}
+          >
+            Upload Chapter
+          </a>
+          <a href="/login" onClick={(event) => goToPage(event, "/login")}>
+            Login
+          </a>
+          <a
+            href="/login?mode=signup"
+            className="primary-mobile-action"
+            onClick={(event) => goToPage(event, "/login?mode=signup")}
+          >
             Sign Up
-          </button>
+          </a>
         </nav>
       </header>
 
@@ -253,10 +268,18 @@ function LandingPage({ navigate }) {
               topic or uploaded chapter PDF.
             </p>
             <div className="hero-actions">
-              <PrimaryButton onClick={() => navigate("/dashboard?mode=quick")}>Generate Test</PrimaryButton>
-              <GhostButton icon={Upload} onClick={() => navigate("/dashboard?mode=quick&source=upload")}>
-                Upload Chapter
-              </GhostButton>
+              <LinkButton to="/dashboard?mode=quick" navigate={navigate} className="button button-primary">
+                <span>Generate Test</span>
+                <ArrowRight size={22} />
+              </LinkButton>
+              <LinkButton
+                to="/dashboard?mode=quick&source=upload"
+                navigate={navigate}
+                className="button button-ghost"
+              >
+                <Upload size={20} />
+                <span>Upload Chapter</span>
+              </LinkButton>
             </div>
             <div className="trust-strip" aria-label="Study Hub trust signal">
               <div className="avatar-row" aria-hidden="true">
@@ -682,6 +705,7 @@ function DashboardPage({ navigate, search = "" }) {
 
 function QuickModeForm({ navigate, initialSource = "topic" }) {
   const [source, setSource] = useState(initialSource);
+  const [chapterFile, setChapterFile] = useState("");
   useEffect(() => {
     setSource(initialSource);
   }, [initialSource]);
@@ -714,17 +738,26 @@ function QuickModeForm({ navigate, initialSource = "topic" }) {
             </span>
           </div>
           <span className="or-chip">or</span>
-          <button
+          <label
             className={`source-option ${source === "upload" ? "active" : ""}`}
             onClick={() => setSource("upload")}
-            type="button"
           >
             <Upload size={38} />
             <span>
               <strong>Upload PDF</strong>
-              <small>Upload your chapter PDF</small>
+              <small>{chapterFile || "Choose your chapter PDF"}</small>
+              <input
+                className="visually-hidden"
+                type="file"
+                accept="application/pdf,.pdf"
+                aria-label="Upload chapter PDF"
+                onChange={(event) => {
+                  setSource("upload");
+                  setChapterFile(event.target.files?.[0]?.name || "");
+                }}
+              />
             </span>
-          </button>
+          </label>
         </div>
       </section>
 
@@ -897,6 +930,8 @@ function AppShell({ children, active, navigate }) {
 }
 
 function UploadCard({ navigate }) {
+  const [quickFile, setQuickFile] = useState("");
+
   return (
     <article className="upload-card">
       <h3>
@@ -904,11 +939,21 @@ function UploadCard({ navigate }) {
         Quick Upload
       </h3>
       <p>Upload chapter PDF and get instant test</p>
-      <button onClick={() => navigate("/dashboard?mode=quick&source=upload")}>
+      <label>
         <Upload size={22} />
         <strong>Upload PDF</strong>
-        <span>or drag and drop here</span>
-      </button>
+        <span>{quickFile || "or drag and drop here"}</span>
+        <input
+          className="visually-hidden"
+          type="file"
+          accept="application/pdf,.pdf"
+          aria-label="Quick upload PDF"
+          onChange={(event) => {
+            setQuickFile(event.target.files?.[0]?.name || "");
+            navigate("/dashboard?mode=quick&source=upload");
+          }}
+        />
+      </label>
     </article>
   );
 }
