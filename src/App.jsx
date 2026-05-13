@@ -176,6 +176,7 @@ function GhostButton({ children, icon: Icon, onClick, className = "" }) {
 }
 
 function LandingPage({ navigate }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navItems = [
     ["Home", "#top"],
     ["Features", "#features"],
@@ -186,12 +187,18 @@ function LandingPage({ navigate }) {
 
   const goToSection = (event, href) => {
     event.preventDefault();
+    setMobileMenuOpen(false);
     navigate(`/${href}`);
+  };
+
+  const goToPage = (to) => {
+    setMobileMenuOpen(false);
+    navigate(to);
   };
 
   return (
     <>
-      <header className="site-header" id="top">
+      <header className={`site-header ${mobileMenuOpen ? "menu-open" : ""}`} id="top">
         <Brand compact />
         <nav className="desktop-nav" aria-label="Main navigation">
           {navItems.map(([item, href], index) => (
@@ -213,9 +220,27 @@ function LandingPage({ navigate }) {
             SIGN UP
           </LinkButton>
         </div>
-        <button className="menu-button" aria-label="Open navigation">
-          <Menu size={24} />
+        <button
+          className="menu-button"
+          aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((isOpen) => !isOpen)}
+        >
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
+        <nav className="mobile-nav" aria-label="Mobile navigation">
+          {navItems.map(([item, href]) => (
+            <a key={item} href={href} onClick={(event) => goToSection(event, href)}>
+              {item}
+            </a>
+          ))}
+          <button onClick={() => goToPage("/dashboard?mode=quick")}>Generate Test</button>
+          <button onClick={() => goToPage("/dashboard?mode=quick&source=upload")}>Upload Chapter</button>
+          <button onClick={() => goToPage("/login")}>Login</button>
+          <button className="primary-mobile-action" onClick={() => goToPage("/login?mode=signup")}>
+            Sign Up
+          </button>
+        </nav>
       </header>
 
       <main>

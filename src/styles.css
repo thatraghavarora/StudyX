@@ -36,6 +36,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
   background:
     linear-gradient(90deg, rgba(5, 5, 5, 0.04) 1px, transparent 1px) 0 0 / 44px 44px,
     linear-gradient(0deg, rgba(5, 5, 5, 0.03) 1px, transparent 1px) 0 0 / 44px 44px,
@@ -287,6 +288,10 @@ p {
   border-radius: 6px;
   background: var(--yellow);
   box-shadow: var(--shadow-soft);
+}
+
+.mobile-nav {
+  display: none;
 }
 
 .hero-section {
@@ -2479,7 +2484,7 @@ p {
 
 @media (max-width: 1050px) {
   .site-header {
-    grid-template-columns: auto auto;
+    grid-template-columns: 1fr auto;
   }
 
   .desktop-nav,
@@ -2490,6 +2495,40 @@ p {
   .menu-button {
     display: grid;
     justify-self: end;
+  }
+
+  .mobile-nav {
+    grid-column: 1 / -1;
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 3px solid var(--ink);
+  }
+
+  .site-header.menu-open .mobile-nav {
+    display: grid;
+  }
+
+  .mobile-nav a,
+  .mobile-nav button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    padding: 10px 12px;
+    border: 3px solid var(--ink);
+    border-radius: 6px;
+    background: var(--white);
+    box-shadow: 3px 3px 0 var(--ink);
+    font-weight: 950;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .mobile-nav .primary-mobile-action {
+    color: var(--white);
+    background: var(--purple);
   }
 
   .hero-section,
@@ -2550,13 +2589,17 @@ p {
 }
 
 @media (max-width: 760px) {
+  :root {
+    --shadow: 4px 4px 0 var(--ink);
+    --shadow-soft: 3px 3px 0 var(--ink);
+  }
+
   .button {
-    min-height: 44px;
+    min-height: 48px;
     padding: 10px 14px;
     font-size: 0.86rem;
   }
 
-  .site-header,
   .workspace-topbar,
   .review-header,
   .dashboard-header,
@@ -2566,9 +2609,44 @@ p {
     grid-template-columns: 1fr;
   }
 
+  .site-header {
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .mobile-nav {
+    grid-template-columns: 1fr;
+  }
+
   .hero-copy h1,
   .login-intro h1 {
-    font-size: clamp(3rem, 16vw, 4.6rem);
+    font-size: 3.6rem;
+    line-height: 0.9;
+  }
+
+  .hero-section,
+  .benefit-section,
+  .how-section,
+  .pricing-section,
+  .about-section {
+    padding: 34px 14px;
+  }
+
+  .hero-actions,
+  .section-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions .button,
+  .section-actions .button {
+    width: 100%;
+  }
+
+  .trust-strip {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .hero-visual {
@@ -2576,7 +2654,7 @@ p {
   }
 
   .mock-window {
-    min-height: 420px;
+    min-height: auto;
     margin: 0;
   }
 
@@ -2604,8 +2682,21 @@ p {
     margin-top: 12px;
   }
 
+  .mock-card {
+    min-height: auto;
+  }
+
+  .step-card,
+  .pricing-card,
+  .about-card,
+  .benefit-card {
+    padding: 18px;
+  }
+
   .feature-card {
     border-right: 0;
+    min-height: auto;
+    padding: 20px;
   }
 
   .site-footer {
@@ -2630,9 +2721,25 @@ p {
     padding: 16px;
   }
 
+  .search-box {
+    min-height: 48px;
+  }
+
+  .profile-area {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    justify-content: stretch;
+  }
+
+  .premium-pill {
+    grid-column: 1 / -1;
+  }
+
   .dashboard-grid,
   .review-content {
     padding: 16px;
+    gap: 16px;
   }
 
   .builder-card {
@@ -2641,7 +2748,27 @@ p {
   }
 
   .side-nav {
-    grid-template-columns: 1fr;
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+  }
+
+  .side-nav button {
+    grid-template-columns: auto auto auto;
+    min-width: max-content;
+    min-height: 46px;
+    padding: 9px 12px;
+  }
+
+  .premium-card {
+    display: none;
+  }
+
+  .sidebar {
+    gap: 14px;
+    padding: 14px;
   }
 
   .source-grid .or-chip {
@@ -2653,8 +2780,45 @@ p {
     grid-template-columns: 1fr;
   }
 
+  .test-page {
+    padding: 12px;
+  }
+
+  .timer-card,
+  .test-progress,
+  .question-sidebar,
+  .question-panel,
+  .ai-panel,
+  .test-footer {
+    box-shadow: none;
+  }
+
+  .question-panel {
+    min-height: auto;
+    padding: 14px;
+  }
+
   .question-body {
     padding: 16px;
+    margin: 14px 0;
+  }
+
+  .question-body h1 {
+    font-size: 1rem;
+  }
+
+  .option-list button {
+    min-height: 60px;
+    padding: 12px;
+  }
+
+  .option-list span {
+    width: 38px;
+    height: 38px;
+  }
+
+  .test-footer {
+    padding: 14px;
   }
 
   .review-question {
@@ -2680,12 +2844,34 @@ p {
   .ai-message {
     grid-template-columns: 1fr;
   }
+
+  .report-banner,
+  .ai-banner {
+    padding: 16px;
+  }
 }
 
 @media (max-width: 480px) {
   .login-page,
   .test-page {
     padding: 10px;
+  }
+
+  .login-page {
+    border-width: 0;
+  }
+
+  .auth-card {
+    padding: 20px;
+    box-shadow: 6px 6px 0 var(--purple);
+  }
+
+  .auth-card h2 {
+    font-size: 2.8rem;
+  }
+
+  .input-row {
+    min-height: 58px;
   }
 
   .brand strong {
@@ -2704,11 +2890,36 @@ p {
   }
 
   .mock-window {
-    min-height: 380px;
+    min-height: auto;
   }
 
   .question-grid {
     grid-template-columns: repeat(4, 1fr);
+  }
+
+  .dashboard-header h1,
+  .review-header h1,
+  .section-heading h2,
+  .about-section h2,
+  .benefit-section h2 {
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .hero-copy h1,
+  .login-intro h1 {
+    font-size: 3rem;
+  }
+
+  .tag {
+    max-width: 100%;
+    min-height: 30px;
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .question-grid button {
+    min-height: 42px;
   }
 
   .donut-card {
