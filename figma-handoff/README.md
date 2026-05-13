@@ -3,8 +3,11 @@
 ## Prototype routes
 
 - Landing: `http://127.0.0.1:5173/`
-- Login / Signup: `http://127.0.0.1:5173/login`
-- Main Dashboard: `http://127.0.0.1:5173/dashboard`
+- Login: `http://127.0.0.1:5173/login`
+- Signup: `http://127.0.0.1:5173/login?mode=signup`
+- Main Dashboard Quick Mode: `http://127.0.0.1:5173/dashboard?mode=quick`
+- Main Dashboard Upload State: `http://127.0.0.1:5173/dashboard?mode=quick&source=upload`
+- Main Dashboard Deep Mode: `http://127.0.0.1:5173/dashboard?mode=deep`
 - Test Page: `http://127.0.0.1:5173/test`
 - AI Review Page: `http://127.0.0.1:5173/review`
 

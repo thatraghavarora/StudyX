@@ -484,7 +484,7 @@ function LoginPage({ navigate, search = "" }) {
     <main className="login-page">
       <section className="login-intro">
         <Brand />
-        <div className="burst">✦</div>
+        <div className="burst">*</div>
         <h1>
           Welcome back,
           <span>champ!</span>
@@ -585,7 +585,7 @@ function DashboardPage({ navigate, search = "" }) {
               <h1>Welcome back, Aryan!</h1>
               <p>Create custom tests in seconds and improve your learning.</p>
             </div>
-            <button className="button button-yellow">
+            <button className="button button-yellow" onClick={() => navigate("/#how-it-works")}>
               <CircleHelp size={19} />
               How it works?
             </button>
@@ -635,7 +635,7 @@ function DashboardPage({ navigate, search = "" }) {
               </article>
             ))}
           </div>
-          <UploadCard />
+          <UploadCard navigate={navigate} />
           <RecentTests />
         </aside>
       </div>
@@ -871,7 +871,7 @@ function AppShell({ children, active, navigate }) {
   );
 }
 
-function UploadCard() {
+function UploadCard({ navigate }) {
   return (
     <article className="upload-card">
       <h3>
@@ -879,7 +879,7 @@ function UploadCard() {
         Quick Upload
       </h3>
       <p>Upload chapter PDF and get instant test</p>
-      <button>
+      <button onClick={() => navigate("/dashboard?mode=quick&source=upload")}>
         <Upload size={22} />
         <strong>Upload PDF</strong>
         <span>or drag and drop here</span>
@@ -1328,4 +1328,7 @@ function NotebookIcon(props) {
 }
 
 function ClockIcon(props) {
-  return <TimerRe
+  return <TimerReset {...props} />;
+}
+
+export default App;

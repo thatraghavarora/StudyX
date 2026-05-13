@@ -554,6 +554,151 @@ p {
   font-weight: 750;
 }
 
+.how-section,
+.pricing-section,
+.about-section {
+  scroll-margin-top: 120px;
+  padding: clamp(46px, 7vw, 92px) clamp(16px, 4vw, 66px);
+  border-top: 4px solid var(--ink);
+}
+
+.section-heading {
+  display: grid;
+  gap: 18px;
+  max-width: 900px;
+  margin-bottom: 30px;
+}
+
+.section-heading h2,
+.about-section h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 4.4rem);
+  font-weight: 1000;
+  line-height: 0.98;
+  text-transform: uppercase;
+}
+
+.step-grid,
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.step-card,
+.pricing-card,
+.about-card {
+  position: relative;
+  padding: 24px;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+.step-number {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--yellow);
+  font-weight: 1000;
+}
+
+.step-card h3,
+.pricing-card h3,
+.about-card h3 {
+  margin: 18px 0 8px;
+  font-size: 1.2rem;
+  font-weight: 950;
+}
+
+.step-card p,
+.pricing-card li,
+.about-section p,
+.about-card p {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.pricing-section {
+  background: #fff;
+}
+
+.pricing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pricing-card.featured {
+  background: linear-gradient(135deg, #fff8c9, #fff);
+}
+
+.pricing-card > strong {
+  display: block;
+  margin: 10px 0 18px;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 1000;
+}
+
+.pricing-card ul {
+  display: grid;
+  gap: 10px;
+  min-height: 120px;
+  padding: 0;
+  margin: 0 0 22px;
+  list-style: none;
+}
+
+.pricing-card li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pricing-card li svg {
+  color: #14a852;
+  flex: 0 0 auto;
+}
+
+.pricing-card .button {
+  width: 100%;
+}
+
+.about-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 520px);
+  gap: clamp(24px, 5vw, 70px);
+  align-items: center;
+}
+
+.about-section > div:first-child p {
+  max-width: 820px;
+  margin-top: 20px;
+  font-size: 1.1rem;
+}
+
+.about-card {
+  background:
+    radial-gradient(circle at 100% 100%, var(--pink) 0 55px, transparent 57px),
+    linear-gradient(135deg, #f3eeff, #fff);
+}
+
+.about-card .button {
+  margin-top: 8px;
+}
+
 .site-footer {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1094,7 +1239,10 @@ p {
   padding: 18px 22px;
   border: 3px solid var(--ink);
   border-radius: 7px;
+  color: var(--ink);
   background: #fff;
+  cursor: pointer;
+  text-align: left;
 }
 
 .source-option.active {
@@ -2346,6 +2494,7 @@ p {
 
   .hero-section,
   .benefit-section,
+  .about-section,
   .login-page,
   .performance-card,
   .trend-panel {
@@ -2362,6 +2511,8 @@ p {
 
   .feature-band,
   .benefit-grid,
+  .step-grid,
+  .pricing-grid,
   .question-type-grid,
   .deep-grid,
   .deep-insight-grid,
@@ -2436,6 +2587,8 @@ p {
   .stats-grid,
   .feature-band,
   .benefit-grid,
+  .step-grid,
+  .pricing-grid,
   .question-type-grid,
   .difficulty-row,
   .deep-grid,
