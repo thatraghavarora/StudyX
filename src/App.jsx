@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LockKeyhole,
+  LogOut,
   Mail,
   Menu,
   MessageSquareText,
@@ -55,6 +56,8 @@ import {
   sections,
   testQuestion,
 } from "./data/studyHubData.js";
+import { supabase } from "./lib/supabaseClient.js";
+import { generateStudyTest } from "./lib/geminiClient.js";
 
 const routes = ["/", "/login", "/dashboard", "/test", "/review"];
 
@@ -67,7 +70,7 @@ function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const navigate = (to) => {
+  const navigate = useCallback((to) => {
     const nextLocation = parseLocation(to);
     window.history.pushState({}, "", nextLocation.href);
     setLocation(nextLocation);
@@ -78,7 +81,7 @@ function App() {
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
-  };
+  }, []);
 
   const page = useMemo(() => {
     if (location.path === "/login") return <LoginPage navigate={navigate} search={location.search} />;
@@ -86,7 +89,7 @@ function App() {
     if (location.path === "/test") return <TestPage navigate={navigate} />;
     if (location.path === "/review") return <ReviewPage navigate={navigate} />;
     return <LandingPage navigate={navigate} />;
-  }, [location]);
+  }, [location, navigate]);
 
   return <div className="app">{page}</div>;
 }
@@ -158,9 +161,9 @@ function IconBadge({ icon: Icon, tone = "purple", className = "" }) {
   );
 }
 
-function PrimaryButton({ children, icon: Icon = ArrowRight, onClick, className = "" }) {
+function PrimaryButton({ children, icon: Icon = ArrowRight, onClick, className = "", disabled = false }) {
   return (
-    <button className={`button button-primary ${className}`} onClick={onClick}>
+    <button className={`button button-primary ${className}`} onClick={onClick} disabled={disabled}>
       <span>{children}</span>
       <Icon size={22} />
     </button>
@@ -527,6 +530,82 @@ function HeroProductPreview() {
 function LoginPage({ navigate, search = "" }) {
   const authMode = new URLSearchParams(search).get("mode") === "signup" ? "signup" : "login";
   const isSignup = authMode === "signup";
+  const [formData, setFormData] = useState({ fullName: "", email: "", password: "" });
+  const [authStatus, setAuthStatus] = useState({ type: "", message: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (active && data.session) {
+        navigate("/dashboard");
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
+
+  const updateField = (field) => (event) => {
+    setFormData((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const handleEmailAuth = async (event) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setAuthStatus({ type: "", message: "" });
+
+    const email = formData.email.trim();
+    const password = formData.password;
+    const fullName = formData.fullName.trim();
+
+    const { data, error } = isSignup
+      ? await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: fullName },
+            emailRedirectTo: `${window.location.origin}/dashboard`,
+          },
+        })
+      : await supabase.auth.signInWithPassword({ email, password });
+
+    setIsSubmitting(false);
+
+    if (error) {
+      setAuthStatus({ type: "error", message: error.message });
+      return;
+    }
+
+    if (data.session) {
+      navigate("/dashboard");
+      return;
+    }
+
+    setAuthStatus({
+      type: "success",
+      message: "Check your email to confirm your account, then come back to login.",
+    });
+  };
+
+  const handleGoogleAuth = async () => {
+    setIsSubmitting(true);
+    setAuthStatus({ type: "", message: "" });
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+      },
+    });
+
+    if (error) {
+      setIsSubmitting(false);
+      setAuthStatus({ type: "error", message: error.message });
+    }
+  };
 
   return (
     <main className="login-page">
@@ -563,26 +642,50 @@ function LoginPage({ navigate, search = "" }) {
         <h2>{isSignup ? "Sign Up" : "Login"}</h2>
         <p>{isSignup ? "Create your AI study account." : "Glad to see you again!"}</p>
         <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            navigate("/dashboard");
-          }}
+          onSubmit={handleEmailAuth}
         >
           {isSignup && (
             <label className="input-row">
               <UserRound size={22} />
-              <input type="text" placeholder="Full Name" aria-label="Full Name" />
+              <input
+                type="text"
+                placeholder="Full Name"
+                aria-label="Full Name"
+                value={formData.fullName}
+                onChange={updateField("fullName")}
+                required
+              />
             </label>
           )}
           <label className="input-row">
             <Mail size={22} />
-            <input type="email" placeholder="Email Address" aria-label="Email Address" />
+            <input
+              type="email"
+              placeholder="Email Address"
+              aria-label="Email Address"
+              value={formData.email}
+              onChange={updateField("email")}
+              required
+            />
           </label>
           <label className="input-row">
             <LockKeyhole size={22} />
-            <input type="password" placeholder="Password" aria-label="Password" />
+            <input
+              type="password"
+              placeholder="Password"
+              aria-label="Password"
+              value={formData.password}
+              onChange={updateField("password")}
+              minLength={6}
+              required
+            />
             <Eye size={20} />
           </label>
+          {authStatus.message && (
+            <p className={`auth-message ${authStatus.type === "error" ? "auth-error" : "auth-success"}`}>
+              {authStatus.message}
+            </p>
+          )}
           <div className="auth-options">
             <label>
               <input type="checkbox" />
@@ -590,8 +693,8 @@ function LoginPage({ navigate, search = "" }) {
             </label>
             <a href="#forgot">Forgot Password?</a>
           </div>
-          <button className="button button-primary full-button" type="submit">
-            {isSignup ? "CREATE ACCOUNT" : "LOGIN"}
+          <button className="button button-primary full-button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "PLEASE WAIT..." : isSignup ? "CREATE ACCOUNT" : "LOGIN"}
           </button>
         </form>
         <div className="divider">
@@ -599,7 +702,7 @@ function LoginPage({ navigate, search = "" }) {
           OR
           <span />
         </div>
-        <button className="google-button" onClick={() => navigate("/dashboard")}>
+        <button className="google-button" onClick={handleGoogleAuth} disabled={isSubmitting}>
           <span>G</span>
           {isSignup ? "Sign up with Google" : "Continue with Google"}
         </button>
@@ -618,6 +721,7 @@ function DashboardPage({ navigate, search = "" }) {
   const query = new URLSearchParams(search);
   const requestedMode = query.get("mode") === "deep" ? "deep" : "quick";
   const requestedSource = query.get("source") === "upload" ? "upload" : "topic";
+  const activeTab = query.get("tab") || "generate";
   const [mode, setMode] = useState(requestedMode);
 
   useEffect(() => {
@@ -625,13 +729,13 @@ function DashboardPage({ navigate, search = "" }) {
   }, [requestedMode]);
 
   return (
-    <AppShell active="Dashboard" navigate={navigate}>
+    <AppShell active={activeTab === "generate" ? (mode === "deep" ? "Deep Mode" : "Generate Test") : dashboardTabLabel(activeTab)} navigate={navigate}>
       <div className="dashboard-grid">
         <section className="main-panel">
           <div className="dashboard-header">
             <div>
-              <h1>Welcome back, Aryan!</h1>
-              <p>Create custom tests in seconds and improve your learning.</p>
+              <h1>{activeTab === "generate" ? "Generate Test" : dashboardTabLabel(activeTab)}</h1>
+              <p>{activeTab === "generate" ? "Create custom tests in seconds and improve your learning." : "Everything here is clickable now, so the dashboard feels alive."}</p>
             </div>
             <button className="button button-yellow" onClick={() => navigate("/#how-it-works")}>
               <CircleHelp size={19} />
@@ -639,37 +743,49 @@ function DashboardPage({ navigate, search = "" }) {
             </button>
           </div>
 
-          <div className="mode-tabs" role="tablist" aria-label="Test generation modes">
-            <button
-              className={mode === "quick" ? "active" : ""}
-              onClick={() => setMode("quick")}
-              role="tab"
-              aria-selected={mode === "quick"}
-            >
-              <Sparkles size={20} />
-              <span>
-                QUICK MODE
-                <small>Custom test with your own settings</small>
-              </span>
-            </button>
-            <button
-              className={mode === "deep" ? "active" : ""}
-              onClick={() => setMode("deep")}
-              role="tab"
-              aria-selected={mode === "deep"}
-            >
-              <Brain size={20} />
-              <span>
-                DEEP MODE <b>NEW</b>
-                <small>AI creates papers from last 5/10 year patterns</small>
-              </span>
-            </button>
-          </div>
+          {activeTab === "generate" ? (
+            <>
+              <div className="mode-tabs" role="tablist" aria-label="Test generation modes">
+                <button
+                  className={mode === "quick" ? "active" : ""}
+                  onClick={() => {
+                    setMode("quick");
+                    navigate("/dashboard?tab=generate&mode=quick");
+                  }}
+                  role="tab"
+                  aria-selected={mode === "quick"}
+                >
+                  <Sparkles size={20} />
+                  <span>
+                    QUICK MODE
+                    <small>Custom test with your own settings</small>
+                  </span>
+                </button>
+                <button
+                  className={mode === "deep" ? "active" : ""}
+                  onClick={() => {
+                    setMode("deep");
+                    navigate("/dashboard?tab=generate&mode=deep");
+                  }}
+                  role="tab"
+                  aria-selected={mode === "deep"}
+                >
+                  <Brain size={20} />
+                  <span>
+                    DEEP MODE <b>NEW</b>
+                    <small>AI creates papers from last 5/10 year patterns</small>
+                  </span>
+                </button>
+              </div>
 
-          {mode === "quick" ? (
-            <QuickModeForm navigate={navigate} initialSource={requestedSource} />
+              {mode === "quick" ? (
+                <QuickModeForm navigate={navigate} initialSource={requestedSource} />
+              ) : (
+                <DeepModeForm navigate={navigate} />
+              )}
+            </>
           ) : (
-            <DeepModeForm navigate={navigate} />
+            <DashboardTabPanel tab={activeTab} navigate={navigate} />
           )}
         </section>
 
@@ -703,19 +819,132 @@ function DashboardPage({ navigate, search = "" }) {
   );
 }
 
+function dashboardTabLabel(tab) {
+  const labels = {
+    home: "Dashboard",
+    tests: "My Tests",
+    results: "Results",
+    tutor: "AI Tutor",
+    bookmarks: "Bookmarks",
+    downloads: "Downloads",
+    material: "Study Material",
+    settings: "Settings",
+  };
+
+  return labels[tab] || "Dashboard";
+}
+
+function DashboardTabPanel({ tab, navigate }) {
+  const panels = {
+    home: {
+      icon: LayoutDashboard,
+      title: "Study Overview",
+      body: "Track your streak, continue recent papers, or jump straight into a fresh generated test.",
+      action: "Generate Test",
+      to: "/dashboard?tab=generate&mode=quick",
+    },
+    tests: {
+      icon: ClipboardList,
+      title: "Saved Tests",
+      body: "Your generated papers and recent attempts are ready from here.",
+      action: "Start Latest Test",
+      to: "/test",
+    },
+    results: {
+      icon: BarChart3,
+      title: "Performance Results",
+      body: "Open the latest report with marks, answer key, explanations, and weak-topic guidance.",
+      action: "Open Results",
+      to: "/review",
+    },
+    tutor: {
+      icon: Sparkles,
+      title: "AI Tutor",
+      body: "Ask Gemini for concepts, hints, revision plans, or detailed explanations.",
+      action: "Generate Practice Paper",
+      to: "/dashboard?tab=generate&mode=quick",
+    },
+    bookmarks: {
+      icon: Bookmark,
+      title: "Bookmarks",
+      body: "Questions you mark during tests will appear here for quick revision.",
+      action: "Go to Test",
+      to: "/test",
+    },
+    downloads: {
+      icon: Download,
+      title: "Downloads",
+      body: "Reports and generated papers can be collected here after export.",
+      action: "View Report",
+      to: "/review",
+    },
+    material: {
+      icon: FileText,
+      title: "Study Material",
+      body: "Upload chapters and turn them into quick practice sets.",
+      action: "Upload Chapter",
+      to: "/dashboard?tab=generate&mode=quick&source=upload",
+    },
+    settings: {
+      icon: Settings,
+      title: "Settings",
+      body: "Account preferences, notifications, and learning defaults will live here.",
+      action: "Back to Dashboard",
+      to: "/dashboard?tab=home",
+    },
+  };
+  const panel = panels[tab] || panels.home;
+  const Icon = panel.icon;
+
+  return (
+    <div className="tab-panel">
+      <IconBadge icon={Icon} tone="purple" />
+      <h2>{panel.title}</h2>
+      <p>{panel.body}</p>
+      {tab === "tests" && <RecentTests />}
+      {tab === "tutor" && <AiTutorPanel />}
+      <PrimaryButton onClick={() => navigate(panel.to)}>{panel.action}</PrimaryButton>
+    </div>
+  );
+}
+
 function QuickModeForm({ navigate, initialSource = "topic" }) {
   const [source, setSource] = useState(initialSource);
   const [chapterFile, setChapterFile] = useState("");
+  const [topic, setTopic] = useState("");
+  const [difficulty, setDifficulty] = useState("Medium");
+  const [counts, setCounts] = useState({ mcq: 20, qa: 10, fill: 10, trueFalse: 10 });
+  const [generationState, setGenerationState] = useState({ loading: false, error: "" });
+
   useEffect(() => {
     setSource(initialSource);
   }, [initialSource]);
 
   const questionTypes = [
-    { label: "MCQ", value: 20, icon: FileQuestion, tone: "yellow" },
-    { label: "Q&A", value: 10, icon: MessageSquareText, tone: "green" },
-    { label: "Fill in the Blanks", value: 10, icon: ListChecks, tone: "pink" },
-    { label: "True / False", value: 10, icon: CheckCircle2, tone: "purple" },
+    { key: "mcq", label: "MCQ", icon: FileQuestion, tone: "yellow" },
+    { key: "qa", label: "Q&A", icon: MessageSquareText, tone: "green" },
+    { key: "fill", label: "Fill in the Blanks", icon: ListChecks, tone: "pink" },
+    { key: "trueFalse", label: "True / False", icon: CheckCircle2, tone: "purple" },
   ];
+
+  const handleGenerate = async () => {
+    setGenerationState({ loading: true, error: "" });
+
+    try {
+      const generatedTest = await generateStudyTest({
+        mode: "quick",
+        topic: source === "upload" ? chapterFile || topic || "Uploaded chapter" : topic,
+        difficulty,
+        counts,
+        context: source === "upload" ? `Student uploaded: ${chapterFile || "chapter PDF"}` : "",
+      });
+
+      localStorage.setItem("studyHubGeneratedTest", JSON.stringify(generatedTest));
+      navigate("/test");
+    } catch (error) {
+      setGenerationState({ loading: false, error: error.message });
+    }
+  };
 
   return (
     <div className="builder-card">
@@ -734,7 +963,12 @@ function QuickModeForm({ navigate, initialSource = "topic" }) {
             <PenLine size={38} />
             <span>
               <strong>Enter Topic / Chapter Name</strong>
-              <input placeholder="e.g. Photosynthesis in Plants" aria-label="Topic or chapter name" />
+              <input
+                placeholder="e.g. Photosynthesis in Plants"
+                aria-label="Topic or chapter name"
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+              />
             </span>
           </div>
           <span className="or-chip">or</span>
@@ -770,7 +1004,15 @@ function QuickModeForm({ navigate, initialSource = "topic" }) {
                 <IconBadge icon={item.icon} tone={item.tone} />
                 <strong>{item.label}</strong>
               </span>
-              <input type="number" defaultValue={item.value} min="0" aria-label={`${item.label} count`} />
+              <input
+                type="number"
+                value={counts[item.key]}
+                min="0"
+                aria-label={`${item.label} count`}
+                onChange={(event) =>
+                  setCounts((current) => ({ ...current, [item.key]: Math.max(0, Number(event.target.value)) }))
+                }
+              />
             </label>
           ))}
         </div>
@@ -780,105 +1022,198 @@ function QuickModeForm({ navigate, initialSource = "topic" }) {
         <h2>3. Select Difficulty Level</h2>
         <div className="difficulty-row">
           {["Easy", "Medium", "Hard", "Mixed"].map((item) => (
-            <button className={item === "Medium" ? "selected" : ""} key={item}>
+            <button
+              className={difficulty === item ? "selected" : ""}
+              key={item}
+              onClick={() => setDifficulty(item)}
+            >
               {item}
             </button>
           ))}
         </div>
       </section>
 
-      <PrimaryButton className="generate-button" onClick={() => navigate("/test")} icon={ArrowRight}>
-        Generate Question Paper
+      {generationState.error && <p className="generation-error">{generationState.error}</p>}
+      <PrimaryButton
+        className="generate-button"
+        onClick={handleGenerate}
+        icon={ArrowRight}
+        disabled={generationState.loading}
+      >
+        {generationState.loading ? "Generating..." : "Generate Question Paper"}
       </PrimaryButton>
     </div>
   );
 }
 
 function DeepModeForm({ navigate }) {
+  const [examContext, setExamContext] = useState({
+    course: "BCA",
+    subject: "Mathematics",
+    topic: "Matrix",
+    reference: "Last 5 Years",
+  });
+  const [generationState, setGenerationState] = useState({ loading: false, error: "" });
+
+  const updateContext = (field) => (event) => {
+    setExamContext((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const handleGenerate = async () => {
+    setGenerationState({ loading: true, error: "" });
+
+    try {
+      const generatedTest = await generateStudyTest({
+        mode: "deep",
+        topic: `${examContext.course} ${examContext.subject} - ${examContext.topic}`,
+        difficulty: "Mixed",
+        counts: { mcq: 20, qa: 10, fill: 5, trueFalse: 5 },
+        context: `Analyze ${examContext.reference} exam style and make the paper pattern-focused.`,
+      });
+
+      localStorage.setItem("studyHubGeneratedTest", JSON.stringify(generatedTest));
+      navigate("/test");
+    } catch (error) {
+      setGenerationState({ loading: false, error: error.message });
+    }
+  };
+
   return (
     <div className="builder-card deep-builder">
-      <section className="form-section">
-        <h2>1. Choose Exam Context</h2>
-        <div className="deep-grid">
-          <SelectLike icon={GraduationIcon} label="Course" value="BCA" />
-          <SelectLike icon={BookOpenIcon} label="Subject" value="Mathematics" />
-          <SelectLike icon={NotebookIcon} label="Topic / Chapter" value="Matrix" />
-          <SelectLike icon={ClockIcon} label="Paper Reference" value="Last 5 Years" />
-        </div>
-      </section>
+      <div className="deep-mode-layout">
+        <section className="form-section deep-config-panel">
+          <h2>1. Choose Exam Context</h2>
+          <div className="deep-grid">
+            <SelectLike icon={GraduationIcon} label="Course" value={examContext.course} onChange={updateContext("course")} options={["BCA", "B.Tech", "B.Sc", "MCA"]} />
+            <SelectLike icon={BookOpenIcon} label="Subject" value={examContext.subject} onChange={updateContext("subject")} options={["Mathematics", "Physics", "Chemistry", "Computer Networks"]} />
+            <SelectLike icon={NotebookIcon} label="Topic / Chapter" value={examContext.topic} onChange={updateContext("topic")} options={["Matrix", "Determinants", "Vectors", "Linear Equations"]} />
+            <SelectLike icon={ClockIcon} label="Paper Reference" value={examContext.reference} onChange={updateContext("reference")} options={["Last 5 Years", "Last 10 Years", "Latest Syllabus", "Mixed Pattern"]} />
+          </div>
+        </section>
 
-      <section className="form-section">
-        <h2>2. AI Exam Pattern Analysis</h2>
-        <div className="deep-insight-grid">
-          {deepInsights.map((insight, index) => (
-            <article className="deep-insight" key={insight.title}>
-              <IconBadge icon={insight.icon} tone={["purple", "yellow", "green", "pink"][index]} />
-              <div>
-                <strong>{insight.title}</strong>
-                <p>{insight.body}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+        <section className="form-section deep-analysis-panel">
+          <h2>2. AI Exam Pattern Analysis</h2>
+          <div className="deep-insight-grid">
+            {deepInsights.map((insight, index) => (
+              <article className="deep-insight" key={insight.title}>
+                <IconBadge icon={insight.icon} tone={["purple", "yellow", "green", "pink"][index]} />
+                <div>
+                  <strong>{insight.title}</strong>
+                  <p>{insight.body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
 
-      <section className="trend-panel">
-        <div>
-          <span className="tag tag-green">AUTO-READY PAPER</span>
-          <h3>BCA Mathematics - Matrix</h3>
-          <p>
-            Expected weight: 14 marks. High-repeat concepts: inverse matrix, determinants, rank,
-            and linear equations.
-          </p>
-        </div>
-        <div className="trend-bars" aria-label="Chapter importance">
-          {["Matrix", "Determinants", "Vectors"].map((label, index) => (
-            <div key={label}>
-              <span>{label}</span>
-              <b style={{ width: ["92%", "74%", "48%"][index] }} />
+          <section className="trend-panel">
+            <div>
+              <span className="tag tag-green">AUTO-READY PAPER</span>
+              <h3>{examContext.course} {examContext.subject} - {examContext.topic}</h3>
+              <p>
+                Expected weight: 14 marks. High-repeat concepts: inverse matrix, determinants,
+                rank, and linear equations.
+              </p>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="trend-bars" aria-label="Chapter importance">
+              {[examContext.topic, "Determinants", "Vectors"].map((label, index) => (
+                <div key={label}>
+                  <span>{label}</span>
+                  <b style={{ width: ["92%", "74%", "48%"][index] }} />
+                </div>
+              ))}
+            </div>
+          </section>
+        </section>
+      </div>
 
-      <PrimaryButton className="generate-button" onClick={() => navigate("/test")} icon={ArrowRight}>
-        Generate Exam Pattern Paper
+      {generationState.error && <p className="generation-error">{generationState.error}</p>}
+      <PrimaryButton
+        className="generate-button"
+        onClick={handleGenerate}
+        icon={ArrowRight}
+        disabled={generationState.loading}
+      >
+        {generationState.loading ? "Generating..." : "Generate Exam Pattern Paper"}
       </PrimaryButton>
     </div>
   );
 }
 
-function SelectLike({ icon: Icon, label, value }) {
+function SelectLike({ icon: Icon, label, value, options = [], onChange }) {
   return (
-    <button className="select-like">
+    <label className="select-like">
       <Icon size={24} />
       <span>
         <small>{label}</small>
-        <strong>{value}</strong>
+        <select value={value} onChange={onChange} aria-label={label}>
+          {options.map((option) => (
+            <option key={option}>{option}</option>
+          ))}
+        </select>
       </span>
       <ChevronDown size={20} />
-    </button>
+    </label>
   );
 }
 
 function AppShell({ children, active, navigate }) {
+  const [authUser, setAuthUser] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const userName =
+    authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || authUser?.email?.split("@")[0] || "Student";
+  const userEmail = authUser?.email || "Not signed in";
+  const userInitial = userName.charAt(0).toUpperCase();
+
+  useEffect(() => {
+    let activeSession = true;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (activeSession) {
+        setAuthUser(data.user);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+    });
+
+    return () => {
+      activeSession = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/login");
+  };
+
+  const navItems = [
+    [LayoutDashboard, "Dashboard", "/dashboard?tab=home"],
+    [Plus, "Generate Test", "/dashboard?tab=generate&mode=quick"],
+    [Brain, "Deep Mode", "/dashboard?tab=generate&mode=deep", "NEW"],
+    [ClipboardList, "My Tests", "/dashboard?tab=tests"],
+    [BarChart3, "Results", "/dashboard?tab=results"],
+  ];
+
   return (
     <div className="shell">
       <aside className="sidebar">
         <Brand compact />
+        <div className="sidebar-account" aria-label="Logged in account">
+          <span className="account-avatar">{userInitial}</span>
+          <div>
+            <strong>{userName}</strong>
+            <span>
+              <Mail size={15} />
+              {userEmail}
+            </span>
+          </div>
+        </div>
         <nav className="side-nav" aria-label="Dashboard navigation">
-          {[
-            [LayoutDashboard, "Dashboard", "/dashboard"],
-            [Plus, "Generate Test", "/dashboard?mode=quick"],
-            [Brain, "Deep Mode", "/dashboard?mode=deep", "NEW"],
-            [ClipboardList, "My Tests", "/dashboard"],
-            [BarChart3, "Results", "/review"],
-            [Sparkles, "AI Tutor", "/dashboard"],
-            [Bookmark, "Bookmarks", "/dashboard"],
-            [Download, "Downloads", "/dashboard"],
-            [FileText, "Study Material", "/dashboard"],
-            [Settings, "Settings", "/dashboard"],
-          ].map(([Icon, label, to, badge]) => (
+          {navItems.map(([Icon, label, to, badge]) => (
             <button
               key={label}
               className={active === label || (active === "Dashboard" && label === "Dashboard") ? "active" : ""}
@@ -889,6 +1224,10 @@ function AppShell({ children, active, navigate }) {
               {badge && <b>{badge}</b>}
             </button>
           ))}
+          <button className="logout-nav" onClick={handleLogout}>
+            <LogOut size={22} />
+            <span>Logout</span>
+          </button>
         </nav>
         <div className="premium-card">
           <Crown size={34} />
@@ -916,11 +1255,26 @@ function AppShell({ children, active, navigate }) {
               <Bell size={22} />
               <i />
             </button>
-            <button className="profile-button">
-              <span>A</span>
-              Hi, Aryan!
+            <button
+              className="profile-button"
+              aria-haspopup="menu"
+              aria-expanded={profileOpen}
+              onClick={() => setProfileOpen((isOpen) => !isOpen)}
+            >
+              <span>{userInitial}</span>
+              Hi, {userName}!
               <ChevronDown size={17} />
             </button>
+            {profileOpen && (
+              <div className="profile-menu" role="menu">
+                <strong>{userName}</strong>
+                <small>{userEmail}</small>
+                <button role="menuitem" onClick={handleLogout}>
+                  <LogOut size={18} />
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </header>
         {children}
@@ -950,7 +1304,7 @@ function UploadCard({ navigate }) {
           aria-label="Quick upload PDF"
           onChange={(event) => {
             setQuickFile(event.target.files?.[0]?.name || "");
-            navigate("/dashboard?mode=quick&source=upload");
+            navigate("/dashboard?tab=generate&mode=quick&source=upload");
           }}
         />
       </label>
@@ -983,6 +1337,46 @@ function RecentTests() {
 }
 
 function TestPage({ navigate }) {
+  const generatedTest = useMemo(() => readGeneratedTest(), []);
+  const testData = useMemo(() => buildTestData(generatedTest), [generatedTest]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [reviewMarks, setReviewMarks] = useState({});
+  const [showSummary, setShowSummary] = useState(false);
+  const currentQuestion = testData.questions[currentIndex];
+  const selectedAnswer = answers[currentQuestion.id] || "";
+  const progress = Math.round(((currentIndex + 1) / testData.questions.length) * 100);
+  const answeredCount = Object.values(answers).filter(Boolean).length;
+  const correctCount = testData.questions.filter((question) => isCorrectAnswer(answers[question.id], question.answer)).length;
+  const wrongCount = testData.questions.length - correctCount;
+  const scorePercent = Math.round((correctCount / testData.questions.length) * 100);
+
+  const goToQuestion = (index) => {
+    setShowSummary(false);
+    setCurrentIndex(index);
+  };
+
+  const goPrevious = () => {
+    setCurrentIndex((index) => Math.max(0, index - 1));
+  };
+
+  const goNext = () => {
+    if (currentIndex === testData.questions.length - 1) {
+      setShowSummary(true);
+      return;
+    }
+    setCurrentIndex((index) => Math.min(testData.questions.length - 1, index + 1));
+  };
+
+  const updateAnswer = (value) => {
+    setAnswers((current) => ({ ...current, [currentQuestion.id]: value }));
+  };
+
+  const handleSubmitTest = () => {
+    saveLatestResult({ testData, answers });
+    setShowSummary(true);
+  };
+
   return (
     <main className="test-page">
       <header className="test-topbar">
@@ -995,10 +1389,10 @@ function TestPage({ navigate }) {
           </span>
         </div>
         <div className="test-progress">
-          <strong>Question {testQuestion.number} of {testQuestion.total}</strong>
-          <span>17%</span>
+          <strong>{showSummary ? "Summary" : `Question ${currentIndex + 1} of ${testData.questions.length}`}</strong>
+          <span>{progress}%</span>
           <div>
-            <b style={{ width: "17%" }} />
+            <b style={{ width: `${progress}%` }} />
           </div>
         </div>
         <div className="test-actions">
@@ -1010,7 +1404,7 @@ function TestPage({ navigate }) {
             <Flag size={20} />
             Flag
           </button>
-          <button className="button button-pink" onClick={() => navigate("/review")}>
+          <button className="button button-pink" onClick={handleSubmitTest}>
             <Upload size={20} />
             Submit Test
           </button>
@@ -1020,22 +1414,21 @@ function TestPage({ navigate }) {
       <div className="test-layout">
         <aside className="question-sidebar">
           <span className="tag tag-yellow">SECTIONS</span>
-          {sections.map((section) => (
-            <button className={section.label === "MCQ" ? "active" : ""} key={section.label}>
+          {getTestSections(testData.questions, answers).map((section) => (
+            <button className={currentQuestion.type === section.label ? "active" : ""} key={section.label}>
               <span>{section.label} ({section.count})</span>
               <b>{section.answered}/{section.count}</b>
             </button>
           ))}
           <span className="tag tag-yellow">QUESTION NAVIGATION</span>
           <div className="question-grid" aria-label="Question navigation">
-            {Array.from({ length: 20 }, (_, index) => index + 1).map((number) => (
+            {testData.questions.map((question, index) => (
               <button
-                key={number}
-                className={
-                  number === 7 ? "current" : number < 7 ? "answered" : [8, 9].includes(number) ? "review" : ""
-                }
+                key={question.id}
+                className={`${index === currentIndex && !showSummary ? "current" : ""} ${answers[question.id] ? "answered" : ""} ${reviewMarks[question.id] ? "review" : ""}`}
+                onClick={() => goToQuestion(index)}
               >
-                {number}
+                {index + 1}
               </button>
             ))}
           </div>
@@ -1044,76 +1437,298 @@ function TestPage({ navigate }) {
             <span><i className="review" /> Review</span>
             <span><i /> Not Answered</span>
           </div>
-          <button className="button button-ghost prev-section">
+          <button className="button button-ghost prev-section" onClick={goPrevious} disabled={currentIndex === 0}>
             <ArrowLeft size={20} />
-            Previous Section
+            Previous
           </button>
         </aside>
 
-        <section className="question-panel">
-          <header>
-            <span className="question-type">{testQuestion.type}</span>
-            <strong>Multiple Choice Question</strong>
-            <div className="marks">
-              Marks:
-              <b>{testQuestion.marks}</b>
-              <em>{testQuestion.negative}</em>
-            </div>
-            <button aria-label="Bookmark question">
-              <Bookmark size={22} />
-            </button>
-          </header>
-          <div className="question-body">
-            <h1>{testQuestion.title}</h1>
-            <div className="formula-line" aria-label="Question molecule diagram">
-              <span>H<sub>3</sub>C</span>
-              <i />
-              <span>CH<sub>2</sub></span>
-              <i />
-              <span>CH<sub>2</sub></span>
-              <i />
-              <span>COOH</span>
-            </div>
-            <div className="option-list">
-              {testQuestion.options.map((option) => (
-                <button className={option.selected ? "selected" : ""} key={option.key}>
-                  <span>{option.key}</span>
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <label className="review-check">
-              <input type="checkbox" />
-              Mark for Review
-            </label>
-          </div>
-          <footer>
-            <button className="button button-ghost">
-              <ArrowLeft size={20} />
-              Previous
-            </button>
-            <button className="button button-primary">
-              Next
-              <ArrowRight size={20} />
-            </button>
-          </footer>
-        </section>
+        {showSummary ? (
+          <section className="question-panel answer-summary-panel">
+            <header>
+              <span className="question-type">RESULT</span>
+              <strong>Test Result</strong>
+              <div className="marks">
+                Score:
+                <b>{scorePercent}%</b>
+              </div>
+            </header>
+            <div className="answer-summary-list">
+              <section className="summary-score-card">
+                <div>
+                  <span>Total Questions</span>
+                  <strong>{testData.questions.length}</strong>
+                </div>
+                <div>
+                  <span>Correct</span>
+                  <strong>{correctCount}</strong>
+                </div>
+                <div>
+                  <span>Wrong</span>
+                  <strong>{wrongCount}</strong>
+                </div>
+                <div>
+                  <span>Score</span>
+                  <strong>{scorePercent}%</strong>
+                </div>
+              </section>
+              {testData.questions.map((question, index) => {
+                const selected = answers[question.id] || "Not answered";
+                const isCorrect = isCorrectAnswer(selected, question.answer);
 
-        <AiTutorPanel compact />
+                return (
+                  <article className={isCorrect ? "correct" : "incorrect"} key={question.id}>
+                    <strong>Q{index + 1}</strong>
+                    <div>
+                      <p>{question.question}</p>
+                      <span>Your answer: <b>{selected}</b></span>
+                      <span>Correct answer: <b>{question.answer || "Not provided"}</b></span>
+                      {!isCorrect && (
+                        <em>
+                          Reason: {question.explanation || "Review the concept and compare your answer with the correct answer."}
+                        </em>
+                      )}
+                    </div>
+                    {isCorrect ? <Check size={20} /> : <X size={20} />}
+                  </article>
+                );
+              })}
+            </div>
+            <footer>
+              <button className="button button-ghost" onClick={() => setShowSummary(false)}>
+                <ArrowLeft size={20} />
+                Back to Paper
+              </button>
+              <button className="button button-primary" onClick={() => navigate("/dashboard?tab=home")}>
+                Dashboard
+                <ArrowRight size={20} />
+              </button>
+            </footer>
+          </section>
+        ) : (
+          <section className="question-panel">
+            <header>
+              <span className="question-type">{currentQuestion.type}</span>
+              <strong>{currentQuestion.type} Question</strong>
+              <div className="marks">
+                Marks:
+                <b>+{currentQuestion.marks}</b>
+                <em>-0</em>
+              </div>
+              <button aria-label="Bookmark question">
+                <Bookmark size={22} />
+              </button>
+            </header>
+            <div className="question-body">
+              <h1>{currentQuestion.question}</h1>
+              {currentQuestion.diagram && (
+                <div className="formula-line" aria-label="Question molecule diagram">
+                  <span>H<sub>3</sub>C</span>
+                  <i />
+                  <span>CH<sub>2</sub></span>
+                  <i />
+                  <span>CH<sub>2</sub></span>
+                  <i />
+                  <span>COOH</span>
+                </div>
+              )}
+              {currentQuestion.options.length ? (
+                <div className="option-list">
+                  {currentQuestion.options.map((option, index) => (
+                    <button
+                      className={selectedAnswer === option ? "selected" : ""}
+                      key={option}
+                      onClick={() => updateAnswer(option)}
+                    >
+                      <span>{String.fromCharCode(65 + index)}</span>
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <label className="written-answer">
+                  <span>Your Answer</span>
+                  <textarea
+                    value={selectedAnswer}
+                    onChange={(event) => updateAnswer(event.target.value)}
+                    placeholder="Type your answer here..."
+                    aria-label="Written answer"
+                  />
+                </label>
+              )}
+              <label className="review-check">
+                <input
+                  type="checkbox"
+                  checked={Boolean(reviewMarks[currentQuestion.id])}
+                  onChange={(event) =>
+                    setReviewMarks((current) => ({ ...current, [currentQuestion.id]: event.target.checked }))
+                  }
+                />
+                Mark for Review
+              </label>
+            </div>
+            <footer>
+              <button className="button button-ghost" onClick={goPrevious} disabled={currentIndex === 0}>
+                <ArrowLeft size={20} />
+                Previous
+              </button>
+              <button className="button button-pink" onClick={handleSubmitTest}>
+                <Upload size={20} />
+                Submit Test
+              </button>
+              <button className="button button-primary" onClick={goNext}>
+                {currentIndex === testData.questions.length - 1 ? "Finish" : "Next"}
+                <ArrowRight size={20} />
+              </button>
+            </footer>
+          </section>
+        )}
       </div>
 
       <footer className="test-footer">
-        <span><b>Test Name:</b> Organic Chemistry - Carboxylic Acids</span>
-        <span><b>Difficulty:</b> <mark>Medium</mark></span>
-        <span><b>Total Marks:</b> 100</span>
-        <span><b>Negative Marking:</b> Yes (1/4th)</span>
-        <button className="button button-yellow">
-          <FileText size={20} />
-          Question Paper
+        <span><b>Test Name:</b> {testData.title}</span>
+        <span><b>Difficulty:</b> <mark>{testData.difficulty}</mark></span>
+        <span><b>Total Marks:</b> {testData.totalMarks}</span>
+        <span><b>Answered:</b> {answeredCount}/{testData.questions.length}</span>
+        <button className="button button-yellow" onClick={handleSubmitTest}>
+          <Upload size={20} />
+          {showSummary ? "Result Shown" : "Submit Test"}
         </button>
       </footer>
     </main>
   );
+}
+
+function readGeneratedTest() {
+  try {
+    return JSON.parse(localStorage.getItem("studyHubGeneratedTest"));
+  } catch {
+    return null;
+  }
+}
+
+function saveLatestResult({ testData, answers }) {
+  const questions = testData.questions.map((question, index) => {
+    const selected = answers[question.id] || "";
+    const isCorrect = isCorrectAnswer(selected, question.answer);
+
+    return {
+      ...question,
+      index: index + 1,
+      selected,
+      status: selected ? (isCorrect ? "correct" : "incorrect") : "skipped",
+    };
+  });
+  const correct = questions.filter((question) => question.status === "correct").length;
+  const incorrect = questions.filter((question) => question.status === "incorrect").length;
+  const skipped = questions.filter((question) => question.status === "skipped").length;
+
+  localStorage.setItem(
+    "studyHubLatestResult",
+    JSON.stringify({
+      ...testData,
+      submittedAt: new Date().toISOString(),
+      correct,
+      incorrect,
+      skipped,
+      answered: correct + incorrect,
+      percentage: Math.round((correct / questions.length) * 100),
+      questions,
+    }),
+  );
+}
+
+function readLatestResult() {
+  try {
+    return JSON.parse(localStorage.getItem("studyHubLatestResult"));
+  } catch {
+    return null;
+  }
+}
+
+function buildTestData(generatedTest) {
+  if (generatedTest?.questions?.length) {
+    return {
+      title: generatedTest.title || "Generated Practice Paper",
+      difficulty: generatedTest.difficulty || "Medium",
+      totalMarks: generatedTest.totalMarks || 100,
+      questions: generatedTest.questions.map((question, index) => ({
+        id: String(question.id || index + 1),
+        type: question.type || "MCQ",
+        question: question.question || "Generated question",
+        options: Array.isArray(question.options) ? question.options : [],
+        answer: question.answer || "",
+        explanation: question.explanation || "",
+        marks: question.marks || 2.5,
+      })),
+    };
+  }
+
+  return {
+    title: "Organic Chemistry - Carboxylic Acids",
+    difficulty: "Medium",
+    totalMarks: 100,
+    questions: [
+      {
+        id: "1",
+        type: testQuestion.type,
+        question: testQuestion.title,
+        options: testQuestion.options.map((option) => option.label),
+        answer: "Butanoic acid",
+        explanation: "The parent chain includes the carboxyl carbon, so four carbons gives butanoic acid.",
+        marks: 2.5,
+        diagram: true,
+      },
+      {
+        id: "2",
+        type: "MCQ",
+        question: "The pKa value of acetic acid is approximately:",
+        options: ["1.76", "3.75", "4.76", "5.76"],
+        answer: "4.76",
+        explanation: "Acetic acid is a weak acid and its standard pKa is close to 4.76.",
+        marks: 2.5,
+      },
+      {
+        id: "3",
+        type: "Fill in the Blanks",
+        question: "The general formula of alkane is ________.",
+        options: [],
+        answer: "CnH2n+2",
+        explanation: "Alkanes are saturated hydrocarbons with only single bonds, giving the formula CnH2n+2.",
+        marks: 2.5,
+      },
+      {
+        id: "4",
+        type: "True / False",
+        question: "Glucose is a monosaccharide.",
+        options: ["True", "False"],
+        answer: "True",
+        explanation: "Glucose is a simple sugar and belongs to the monosaccharide group.",
+        marks: 2.5,
+      },
+    ],
+  };
+}
+
+function getTestSections(questions, answers) {
+  const sectionMap = questions.reduce((map, question) => {
+    const section = map.get(question.type) || { label: question.type, count: 0, answered: 0 };
+    section.count += 1;
+    if (answers[question.id]) section.answered += 1;
+    map.set(question.type, section);
+    return map;
+  }, new Map());
+
+  return Array.from(sectionMap.values());
+}
+
+function isCorrectAnswer(selectedAnswer, correctAnswer) {
+  if (!selectedAnswer || !correctAnswer) return false;
+  return normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer);
+}
+
+function normalizeAnswer(answer) {
+  return String(answer).trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function AiTutorPanel({ compact = false }) {
@@ -1166,22 +1781,27 @@ function AiTutorPanel({ compact = false }) {
 }
 
 function ReviewPage({ navigate }) {
+  const latestResult = useMemo(() => readLatestResult(), []);
+  const reviewData = latestResult || buildFallbackReviewData();
+  const reviewQuestionRows = reviewData.questions.map((question) => ({
+    id: `Q.${question.index}`,
+    type: question.type,
+    status: question.status,
+    question: question.question,
+    marks: question.status === "correct" ? `+${question.marks} Marks` : question.status === "skipped" ? "Skipped" : "0 Marks",
+  }));
+
   return (
     <div className="review-shell">
       <aside className="sidebar review-sidebar">
         <Brand compact />
         <nav className="side-nav" aria-label="Results navigation">
           {[
-            [LayoutDashboard, "Dashboard", "/dashboard"],
-            [Plus, "Generate Test", "/dashboard?mode=quick"],
-            [Brain, "Deep Mode", "/dashboard?mode=deep", "NEW"],
-            [ClipboardList, "My Tests", "/dashboard"],
+            [LayoutDashboard, "Dashboard", "/dashboard?tab=home"],
+            [Plus, "Generate Test", "/dashboard?tab=generate&mode=quick"],
+            [Brain, "Deep Mode", "/dashboard?tab=generate&mode=deep", "NEW"],
+            [ClipboardList, "My Tests", "/dashboard?tab=tests"],
             [BarChart3, "Results", "/review"],
-            [Sparkles, "AI Tutor", "/review"],
-            [Bookmark, "Bookmarks", "/review"],
-            [Download, "Downloads", "/review"],
-            [FileText, "Study Material", "/review"],
-            [Settings, "Settings", "/review"],
           ].map(([Icon, label, to, badge]) => (
             <button className={label === "Results" ? "active" : ""} key={label} onClick={() => navigate(to)}>
               <Icon size={22} />
@@ -1205,7 +1825,7 @@ function ReviewPage({ navigate }) {
         <header className="review-header">
           <div>
             <h1>Test Completed!</h1>
-            <p>Great job, Aryan! Here&apos;s your performance.</p>
+            <p>{reviewData.title} result stored in this browser.</p>
           </div>
           <div>
             <button className="button button-ghost">
@@ -1216,7 +1836,7 @@ function ReviewPage({ navigate }) {
               <RefreshCcw size={20} />
               Retake Test
             </button>
-            <button className="button button-primary" onClick={() => navigate("/dashboard")}>
+            <button className="button button-primary" onClick={() => navigate("/dashboard?tab=home")}>
               <Home size={20} />
               Go to Dashboard
             </button>
@@ -1226,7 +1846,13 @@ function ReviewPage({ navigate }) {
         <div className="review-content">
           <section className="review-left">
             <div className="result-stats">
-              {reviewStats.map((stat) => (
+              {[
+                { label: "Total Marks", value: reviewData.totalMarks, tone: "green" },
+                { label: "Score", value: `${reviewData.percentage}%`, tone: "yellow" },
+                { label: "Correct Answers", value: `${reviewData.correct} / ${reviewData.questions.length}`, tone: "green" },
+                { label: "Wrong Answers", value: `${reviewData.incorrect} / ${reviewData.questions.length}`, tone: "pink" },
+                { label: "Skipped", value: `${reviewData.skipped} / ${reviewData.questions.length}`, tone: "blue" },
+              ].map((stat) => (
                 <article className={`result-stat tone-bg-${stat.tone}`} key={stat.label}>
                   <span>{stat.label}</span>
                   <strong>{stat.value}</strong>
@@ -1238,19 +1864,19 @@ function ReviewPage({ navigate }) {
               <div className="donut-card" aria-label="Performance overview">
                 <div className="donut">
                   <span>
-                    <strong>78.5%</strong>
+                    <strong>{reviewData.percentage}%</strong>
                     Score
                   </span>
                 </div>
                 <div className="donut-legend">
-                  <span><i className="good" /> Correct 31 (77.5%)</span>
-                  <span><i className="bad" /> Incorrect 7 (17.5%)</span>
-                  <span><i className="skip" /> Skipped 2 (5%)</span>
+                  <span><i className="good" /> Correct {reviewData.correct}</span>
+                  <span><i className="bad" /> Incorrect {reviewData.incorrect}</span>
+                  <span><i className="skip" /> Skipped {reviewData.skipped}</span>
                 </div>
               </div>
               <div className="section-performance">
                 <h2>Section Wise Performance</h2>
-                {sectionPerformance.map((item) => (
+                {buildSectionPerformance(reviewData.questions).map((item) => (
                   <div className="bar-row" key={item.label}>
                     <span>{item.label}</span>
                     <b>{item.value}</b>
@@ -1268,14 +1894,22 @@ function ReviewPage({ navigate }) {
                 <span className="tag tag-green">WITH REASONS</span>
               </header>
               <div className="answer-key-grid">
-                {answerKey.map((item) => (
-                  <article key={item.q}>
-                    <strong>{item.q}</strong>
-                    <span>{item.answer}</span>
-                    <p>{item.reason}</p>
+                {reviewData.questions.map((item) => (
+                  <article key={item.id}>
+                    <strong>Q.{item.index}</strong>
+                    <span>{item.answer || "Not provided"}</span>
+                    <p>{item.explanation || "Reason not available for this generated question."}</p>
                   </article>
                 ))}
               </div>
+            </section>
+
+            <section className="test-object-card">
+              <header>
+                <h2>Saved Test Project Object</h2>
+                <span className="tag tag-yellow">BROWSER SAVED</span>
+              </header>
+              <pre>{JSON.stringify(buildReviewProjectObject(reviewData), null, 2)}</pre>
             </section>
 
             <section className="question-review-card">
@@ -1290,7 +1924,7 @@ function ReviewPage({ navigate }) {
                 </div>
               </header>
               <div className="review-question-list">
-                {questionReviews.map((question) => (
+                {reviewQuestionRows.map((question) => (
                   <article className={`review-question ${question.status}`} key={question.id}>
                     <strong>{question.id}</strong>
                     {question.status === "correct" ? (
@@ -1316,21 +1950,93 @@ function ReviewPage({ navigate }) {
             <section className="report-banner">
               <RobotFace />
               <div>
-                <h3>Need a detailed performance analysis?</h3>
-                <p>Ask AI Tutor for a deep report on your weak topics and improvement tips.</p>
+                <h3>Latest browser result</h3>
+                <p>{latestResult ? "This report is loaded from the test you submitted in this browser." : "No saved browser result found, so sample data is shown."}</p>
               </div>
-              <button className="button button-ghost">
-                Get Detailed Report
+              <button className="button button-ghost" onClick={() => navigate("/test")}>
+                Open Test
                 <ArrowRight size={20} />
               </button>
             </section>
           </section>
-
-          <AiTutorPanel />
         </div>
       </main>
     </div>
   );
+}
+
+function buildFallbackReviewData() {
+  const questions = questionReviews.map((question, index) => {
+    const key = answerKey[index] || answerKey[0];
+
+    return {
+      id: String(index + 1),
+      index: index + 1,
+      type: question.type,
+      status: question.status,
+      question: question.question,
+      selected: question.status === "skipped" ? "" : question.status === "correct" ? key.answer : "Wrong answer",
+      answer: key.answer,
+      explanation: key.reason,
+      marks: question.status === "correct" ? 2.5 : 0,
+    };
+  });
+  const correct = questions.filter((question) => question.status === "correct").length;
+  const incorrect = questions.filter((question) => question.status === "incorrect").length;
+  const skipped = questions.filter((question) => question.status === "skipped").length;
+
+  return {
+    title: "Organic Chemistry - Carboxylic Acids",
+    totalMarks: 100,
+    percentage: 78,
+    correct,
+    incorrect,
+    skipped,
+    questions,
+  };
+}
+
+function buildSectionPerformance(questions) {
+  const sectionsByType = questions.reduce((map, question) => {
+    const section = map.get(question.type) || { label: question.type, total: 0, correct: 0 };
+    section.total += 1;
+    if (question.status === "correct") section.correct += 1;
+    map.set(question.type, section);
+    return map;
+  }, new Map());
+
+  return Array.from(sectionsByType.values()).map((section) => ({
+    label: `${section.label} (${section.total})`,
+    value: `${section.correct} / ${section.total}`,
+    width: `${Math.round((section.correct / section.total) * 100)}%`,
+  }));
+}
+
+function buildReviewProjectObject(reviewData) {
+  return {
+    project: "Study Hub Test Review",
+    testSet: {
+      status: "submitted",
+      title: reviewData.title,
+      totalMarks: reviewData.totalMarks,
+      submittedAt: reviewData.submittedAt || "sample-result",
+    },
+    result: {
+      scorePercent: reviewData.percentage,
+      totalQuestions: reviewData.questions.length,
+      correct: reviewData.correct,
+      wrong: reviewData.incorrect,
+      skipped: reviewData.skipped,
+    },
+    questions: reviewData.questions.map((question) => ({
+      questionNo: question.index,
+      type: question.type,
+      selectedAnswer: question.selected || "Not answered",
+      correctAnswer: question.answer || "Not provided",
+      status: question.status,
+      reason: question.explanation || "Reason not available.",
+    })),
+  };
 }
 
 function ReviewExplanation() {
