@@ -60,9 +60,12 @@ import { supabase } from "./lib/supabaseClient.js";
 import { generateStudyTest } from "./lib/geminiClient.js";
 
 const routes = ["/", "/login", "/dashboard", "/test", "/review"];
+const protectedRoutes = ["/dashboard", "/test", "/review"];
 
 function App() {
   const [location, setLocation] = useState(() => readLocation());
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
     const onPopState = () => setLocation(readLocation());
@@ -83,13 +86,60 @@ function App() {
     });
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    const cleanAuthUrl = () => {
+      if (!hasAuthParams(window.location.hash, window.location.search)) return;
+      const cleanUrl = stripAuthParams(window.location.pathname, window.location.search);
+      window.history.replaceState({}, "", cleanUrl);
+      setLocation(readLocation());
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSession(data.session);
+      setAuthLoading(false);
+      cleanAuthUrl();
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+      setAuthLoading(false);
+      cleanAuthUrl();
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (protectedRoutes.includes(location.path) && !session) {
+      navigate(`/login?redirect=${encodeURIComponent(location.href)}`);
+      return;
+    }
+
+    if (location.path === "/login" && session) {
+      const redirectTo = getSafeRedirect(new URLSearchParams(location.search).get("redirect"));
+      navigate(redirectTo);
+    }
+  }, [authLoading, location, navigate, session]);
+
   const page = useMemo(() => {
+    if (authLoading && protectedRoutes.includes(location.path)) return <LoadingPage />;
     if (location.path === "/login") return <LoginPage navigate={navigate} search={location.search} />;
     if (location.path === "/dashboard") return <DashboardPage navigate={navigate} search={location.search} />;
     if (location.path === "/test") return <TestPage navigate={navigate} />;
     if (location.path === "/review") return <ReviewPage navigate={navigate} />;
     return <LandingPage navigate={navigate} />;
-  }, [location, navigate]);
+  }, [authLoading, location, navigate]);
 
   return <div className="app">{page}</div>;
 }
@@ -112,6 +162,40 @@ function parseLocation(to) {
 function normalizePath(pathname) {
   const clean = pathname.replace(/\/+$/, "") || "/";
   return routes.includes(clean) ? clean : "/";
+}
+
+function hasAuthParams(hash = "", search = "") {
+  const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+  const searchParams = new URLSearchParams(search);
+  return Boolean(
+    hashParams.get("access_token") ||
+      hashParams.get("refresh_token") ||
+      hashParams.get("error") ||
+      hashParams.get("error_code") ||
+      searchParams.get("code") ||
+      searchParams.get("error") ||
+      searchParams.get("error_code"),
+  );
+}
+
+function stripAuthParams(pathname, search = "") {
+  const params = new URLSearchParams(search);
+  ["code", "error", "error_code", "error_description"].forEach((key) => params.delete(key));
+  const nextSearch = params.toString();
+  return `${pathname}${nextSearch ? `?${nextSearch}` : ""}`;
+}
+
+function getSafeRedirect(value) {
+  if (!value) return "/dashboard";
+
+  try {
+    const url = new URL(value, window.location.origin);
+    const path = normalizePath(url.pathname);
+    if (!protectedRoutes.includes(path)) return "/dashboard";
+    return `${path}${url.search}${url.hash}`;
+  } catch {
+    return "/dashboard";
+  }
 }
 
 function LinkButton({ to, navigate, className = "", children, ...props }) {
@@ -528,7 +612,9 @@ function HeroProductPreview() {
 }
 
 function LoginPage({ navigate, search = "" }) {
-  const authMode = new URLSearchParams(search).get("mode") === "signup" ? "signup" : "login";
+  const loginParams = new URLSearchParams(search);
+  const authMode = loginParams.get("mode") === "signup" ? "signup" : "login";
+  const redirectTo = getSafeRedirect(loginParams.get("redirect"));
   const isSignup = authMode === "signup";
   const [formData, setFormData] = useState({ fullName: "", email: "", password: "" });
   const [authStatus, setAuthStatus] = useState({ type: "", message: "" });
@@ -539,14 +625,14 @@ function LoginPage({ navigate, search = "" }) {
 
     supabase.auth.getSession().then(({ data }) => {
       if (active && data.session) {
-        navigate("/dashboard");
+        navigate(redirectTo);
       }
     });
 
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [navigate, redirectTo]);
 
   const updateField = (field) => (event) => {
     setFormData((current) => ({ ...current, [field]: event.target.value }));
@@ -567,7 +653,7 @@ function LoginPage({ navigate, search = "" }) {
           password,
           options: {
             data: { full_name: fullName },
-            emailRedirectTo: `${window.location.origin}/dashboard`,
+            emailRedirectTo: `${window.location.origin}${redirectTo}`,
           },
         })
       : await supabase.auth.signInWithPassword({ email, password });
@@ -580,7 +666,7 @@ function LoginPage({ navigate, search = "" }) {
     }
 
     if (data.session) {
-      navigate("/dashboard");
+      navigate(redirectTo);
       return;
     }
 
@@ -597,7 +683,7 @@ function LoginPage({ navigate, search = "" }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/dashboard`,
+        redirectTo: `${window.location.origin}${redirectTo}`,
       },
     });
 
@@ -816,6 +902,17 @@ function DashboardPage({ navigate, search = "" }) {
         </button>
       </section>
     </AppShell>
+  );
+}
+
+function LoadingPage() {
+  return (
+    <main className="login-page">
+      <section className="auth-card">
+        <h2>Opening your dashboard...</h2>
+        <p>Securing your session and loading StudyX.</p>
+      </section>
+    </main>
   );
 }
 
