@@ -1,5 +1,9 @@
 node_modules/
 dist/
+dist-ssr/
+.vite/
+.vercel/
+coverage/
 .env
 .env.*
 !.env.example
@@ -8,3 +12,4 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .DS_Store
+Thumbs.db
